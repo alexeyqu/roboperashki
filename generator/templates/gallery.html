@@ -1,0 +1,8 @@
+ 
+<h1>{{ Сохранённые робоперашки }}</h1>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+{% for perashok in perashki_list %}
+    <p>{{ perashok }}</p>
+{% endfor %}
