@@ -1,16 +1,19 @@
 <div style="text-align:center">
     <h1>Робоперашки</h1>
 
-    {% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+    {% if info_message %}<p><strong>{{ info_message }}</strong></p>{% endif %}
     
     <form action="{% url 'generator_index' %}" method="post">
         {% csrf_token %}
         {% if perashok_lines %}
-            {% for line in perashok_lines %}
-                <p>{{ line }}</p>
-            {% endfor %}
-            <input type="submit" value="Ещё пирожков?" name="more" />
-            <!-- <input type="submit" value="Сохранить для потомков" name="save" /> -->
+            <p>
+            <label name = text>
+                {% for line in perashok_lines %} {{ line }}</br> {% endfor %}
+            </label>
+            </p>
+            <input type="hidden" name="hidden_text" value = "{{ perashok_text }}" />
+            <input type="submit" value="Ещё пирожков!" name="more" />
+            <input type="submit" value="Сохранить для потомков" name="save" />
         {% else %}
             <input type="submit" value="Испечь робопирожок!" name="more" />
         {% endif %}

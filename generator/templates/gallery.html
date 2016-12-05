@@ -1,8 +1,13 @@
- 
-<h1>{{ Сохранённые робоперашки }}</h1>
+<div style="text-align:center">
+    <h1>Сохранённые робоперашки</h1>
 
-{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+    {% if info_message %}<p><strong>{{ info_message }}</strong></p>{% endif %}
 
-{% for perashok in perashki_list %}
-    <p>{{ perashok }}</p>
-{% endfor %}
+    {% for perashok in perashki_list %}
+        <p>
+            {% for line in perashok.0 %} {{ line }}</br> {% endfor %}
+        </p>
+        <i>{{ perashok.1 }}</i>
+        <p>*****</p>
+    {% endfor %}
+</div>
