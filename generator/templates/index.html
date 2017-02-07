@@ -7,7 +7,7 @@
         {% csrf_token %}
         {% if perashok_lines %}
             <p>
-            <label name = text>
+            <label name="text">
                 {% for line in perashok_lines %} {{ line }}</br> {% endfor %}
             </label>
             </p>

@@ -1,0 +1,29 @@
+<div style="text-align:center">
+    <h1>Словосочетания</h1>
+
+    {% if info_message %}<p><strong>{{ info_message }}</strong></p>{% endif %}
+    
+    <form action="{% url 'collocations' %}" method="post">
+        {%csrf_token%}
+        <select name="left_pos" required>
+            {% for tag in pos_tags %}
+                <option value="{{tag}}">{{tag}}</option>
+            {% endfor %}
+        </select>
+        <select name="right_pos" required>
+            {% for tag in pos_tags %}
+                <option value="{{tag}}">{{tag}}</option>
+            {% endfor %}
+        </select>
+        <p>
+            <input type="submit" value="Получить словосочетания">
+        </p>
+    </form>
+    
+    {% if collocation_list %}
+        <h3>Результаты:</h3>
+        {% for collocation in collocation_list %}
+            <p>{{ collocation }} </p>
+        {% endfor %}
+    {% endif %}
+</div>
