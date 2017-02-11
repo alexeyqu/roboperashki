@@ -6,11 +6,22 @@ import random
 from os import listdir
 from os.path import isfile, join
 import pickle
+import itertools
 
-MAX_RANDOM_ITER = 1000
+from phonetics.phonetics import Phonetics
+
+from django.conf import settings
+
+MAX_RANDOM_ITER = 100
+
 
 def tokenize(line):
-    return re.findall(r"[^\W\d]+|[^\w\s]+|\s+|\d+", line, re.LOCALE & re.UNICODE)[::-1]
+    return [token.lower() for token in re.findall(r"[^\W\d]+|[^\w\s]+|\s+|\d+", line, re.LOCALE & re.UNICODE)]
+
+
+def tokenize_without_punctuation(line):
+    for token in re.findall(r"[а-яА-Я][а-яА-Я\-\s]*", line, re.LOCALE & re.UNICODE):
+        yield itertools.chain(*([t.split('-') for t in token.strip().lower().split()]))
 
 
 def output_tokens(input_stream, args):
@@ -20,40 +31,39 @@ def output_tokens(input_stream, args):
         for token in tokenize(line.strip()):
             print(token, file=output_stream)
 
+
 class MarkovChainsGenerator:
     def __init__(self, depth):
         self.depth = depth
-        self.frequencies = { True : defaultdict(Counter), False : defaultdict(Counter) }
+        self.frequencies = defaultdict(Counter)
         self.number_of_syllables = { True : 9, False : 8 }
-        self.russian_vowels = ["ё", "у", "е", "ы", "а", "о", "э", "я", "и", "ю"]
+        self.russian_vowels = "ёуеыаоэяию"                
 
-    def calculate_probabilities(self, token_generator, is_even_line):
+    def calculate_probabilities(self, token_generator):
         current_tokens = []
         for index, token in enumerate(token_generator):
             for start in range(len(current_tokens) + 1):
                 chain = tuple(current_tokens[start:])
-                if len(chain) == 0 and index != 0:
+                if (len(chain) == 0 and index != 0) or not self._is_chain_legal(list(chain) + [token]):
                     continue
-                self.frequencies[is_even_line][chain][token] += 1
+                self.frequencies[chain][token] += 1
 
             if len(current_tokens) == self.depth:
                 current_tokens.pop(0)
             current_tokens.append(token)
             
     def get_probabilities_table(self):
-        probabilities_table = {True : {}, False : {}}
+        probabilities_table = {}
 
-        for line_type in [True, False]:
-            for chain, token_counter in self.frequencies[line_type].items():
-                size = sum(token_counter.values())
-                probabilities_table[line_type][' '.join(chain)] = [(token, freq / size)
-                                                        for token, freq
-                                                        in sorted(token_counter.items())]
-
+        for chain, token_counter in self.frequencies.items():
+            size = sum(token_counter.values())
+            probabilities_table[' '.join(chain)] = [(token, freq / size)
+                                                    for token, freq
+                                                    in sorted(token_counter.items())]
         return probabilities_table
 
-    def _make_random_token(self, is_even_line, chain=tuple()):
-        token_counter = self.frequencies[is_even_line][chain]
+    def _make_random_token(self, chain=tuple()):
+        token_counter = self.frequencies[chain]
 
         if not token_counter:
             return None
@@ -70,24 +80,58 @@ class MarkovChainsGenerator:
         counter = Counter(word)
         return sum([counter[letter] for letter in self.russian_vowels])
             
+    def _is_chain_legal(self, chain, is_prefix=False):
+        # TODO: check different accent variants
+        syllables = 0
+        accents = []
+        if is_prefix:
+            accents.append(-1)
+        for word in chain:
+            curr_syllables = self._get_number_of_syllables(word)
+            if curr_syllables > 1:
+                curr_accents = Phonetics.get_word_accent(word)
+                if len(curr_accents) == 0:
+                    return False
+                accents.append(syllables + self._get_number_of_syllables(word[:curr_accents[0]]))
+            syllables += curr_syllables
+        
+        # print(chain, accents)
+        for i in range(len(accents) - 1):
+            if (accents[i + 1] - accents[i]) % 2 == 1:
+                return False
+        return True
+
+    def _is_first_token_legal(self, token):
+        if self._get_number_of_syllables(token) < 2:
+            return True
+        accents = Phonetics.get_word_accent(token)
+        for possible_accent in accents:
+            if self._get_number_of_syllables(token[:possible_accent]) % 2 == 1:
+                return True
+        return False
+    
+    def _is_prefix_legal(self, chain):
+        return self._is_chain_legal(chain, is_prefix=True)
+            
     def _make_next_token(self, is_even_line, cur_number_of_syllables,
                          new_sentence_tokens, max_iterations=MAX_RANDOM_ITER):
         chain = tuple(new_sentence_tokens[-self.depth:])
-        new_token = self._make_random_token(is_even_line, chain)
+        new_token = self._make_random_token(chain)
         iter_count = 1
         while self._get_number_of_syllables(new_token) + cur_number_of_syllables \
                 > self.number_of_syllables[is_even_line]:
-            new_token = self._make_random_token(is_even_line, chain)
+            new_token = self._make_random_token(chain)
             iter_count += 1
             if iter_count > max_iterations:
                 return None
+        
         return new_token
 
-    def _make_initial_token(self, is_even_line, max_iterations=MAX_RANDOM_ITER):
-        new_token = self._make_random_token(is_even_line)
+    def _make_initial_token(self, max_iterations=MAX_RANDOM_ITER):
+        new_token = self._make_random_token()
         iteration_count = 0
-        while not new_token.isalpha() and iteration_count < max_iterations:
-            new_token = self._make_random_token(is_even_line)
+        while not (new_token.isalpha() and self._is_first_token_legal(new_token)) and iteration_count < max_iterations:
+            new_token = self._make_random_token()
             iteration_count += 1
 
         if iteration_count == max_iterations:
@@ -112,26 +156,36 @@ class MarkovChainsGenerator:
         return ''.join(sentence).strip()
 
     def _generate_line(self, is_even_line):
-        words_sequence = [self._make_initial_token(is_even_line)]
-        cur_number_of_syllables = self._get_number_of_syllables(words_sequence[0])
-        while cur_number_of_syllables != self.number_of_syllables[is_even_line]:
-            new_token = self._make_next_token(is_even_line, cur_number_of_syllables, words_sequence)
-            while new_token is None:
-                poped_word = words_sequence.pop()
-                cur_number_of_syllables -= self._get_number_of_syllables(poped_word)
-                if len(words_sequence) > 0:
-                    new_token = self._make_next_token(is_even_line, cur_number_of_syllables, words_sequence)
-                else:
-                    words_sequence = [self._make_initial_token(is_even_line)]
+        words_sequence = None
+        while (words_sequence is None) or (not self._is_prefix_legal(words_sequence)):
+            words_sequence = [self._make_initial_token()]
+            cur_number_of_syllables = self._get_number_of_syllables(words_sequence[0])
+            
+            tries_num = 0
+            while cur_number_of_syllables != self.number_of_syllables[is_even_line]:
+                if tries_num >= MAX_RANDOM_ITER:
+                    tries_num = 0
+                    words_sequence = [self._make_initial_token()]
                     cur_number_of_syllables = self._get_number_of_syllables(words_sequence[0])
+                else:
                     new_token = self._make_next_token(is_even_line, cur_number_of_syllables, words_sequence)
-            words_sequence.append(new_token)
-            cur_number_of_syllables += self._get_number_of_syllables(new_token)
-        return ' '.join(words_sequence[::-1])
+                    while new_token is None:
+                        tries_num += 1
+                        poped_word = words_sequence.pop()
+                        cur_number_of_syllables -= self._get_number_of_syllables(poped_word)
+                        if len(words_sequence) > 0:
+                            new_token = self._make_next_token(is_even_line, cur_number_of_syllables, words_sequence)
+                        else:
+                            words_sequence = [self._make_initial_token()]
+                            cur_number_of_syllables = self._get_number_of_syllables(words_sequence[0])
+                            new_token = self._make_next_token(is_even_line, cur_number_of_syllables, words_sequence)
+                    words_sequence.append(new_token)
+                    cur_number_of_syllables += self._get_number_of_syllables(new_token)
+
+        return ' '.join(words_sequence)
     
     def generate_perashok(self):
         lines = []
-
         for i in range(4):
             lines.append(self._generate_line(i % 2 == 0))
         return '\n'.join(lines)
@@ -143,48 +197,31 @@ class MarkovChainsGenerator:
     def load_dumped(self, filename):
         with open(filename, 'rb') as dumped_file:
             self.frequencies = pickle.load(dumped_file)
-    
-def output_probabilities(input_stream, args):
-    generator = MarkovChainsGenerator(args.depth)
-
-    for line in input_stream:
-        line = line.strip()
-        generator.calculate_probabilities(filter(str.isalpha, tokenize(line)))
-
-    with open('output.txt', 'w', encoding='utf-8') as output_stream:
-        for chain, tokens in sorted(generator.get_probabilities_table().items()):
-            print(chain, file=output_stream)
-            for token, probability in tokens:
-                print('  {tok}: {prob:.2f}'.format(tok=token, prob=probability),
-                      file=output_stream)
 
 
-def output_generated(input_stream, args):
-    generator = MarkovChainsGenerator(args.depth)
-    raw_text = input_stream.read()
-    generator.calculate_probabilities(filter(lambda x: re.match("\S", x), tokenize(raw_text)))
-
-    with open('output.txt', 'w', encoding='utf-8') as output_stream:
-        print(generator.generate_text(args.size), file=output_stream)
-        
-def create_and_dump_generator(depth, dump_filename):
-    perashki_dir = 'static/perashki/'
-    perashki = [join(perashki_dir, f) for f in listdir(perashki_dir) if isfile(join(perashki_dir, f))]
+def create_and_dump_generator(depth, foldername, dump_filename):
+    directory = join(settings.BASE_DIR, 'static', foldername)
+    perashki = [join(directory, f) for f in listdir(directory) if isfile(join(directory, f))]
 
     generator = MarkovChainsGenerator(depth)
 
     for perashok_file in perashki:
         with open(perashok_file, encoding='utf-8') as input_stream:
-            for i, line in enumerate(input_stream.readlines()[2:]):
+            for i, line in enumerate(input_stream.readlines()):
                 line = line.strip()
-                generator.calculate_probabilities(filter(str.isalpha, tokenize(line)), i % 2 == 0)
+                for tokens in tokenize_without_punctuation(line):
+                    generator.calculate_probabilities(tokens)
+    # DEBUG            
+    # print(generator.get_probabilities_table())
+    
     generator.dump_self(dump_filename)
 
+
 # dummy function, generating one perashok with default arguments
-def make_random_perashok():
-    #create_and_dump_generator(depth=2, dump_filename='static/generator.pickle')
+def make_random_perashok(foldername='constitution', dump_filename=join(settings.BASE_DIR, 'static', 'generator.pickle')):
+    create_and_dump_generator(depth=2, foldername=foldername, dump_filename=dump_filename)
     
     generator = MarkovChainsGenerator(2)
-    generator.load_dumped('static/generator.pickle')
+    generator.load_dumped(dump_filename)
     
     return generator.generate_perashok()

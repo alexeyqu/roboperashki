@@ -11,10 +11,11 @@ import bs4
 from scrapy.spiders import CrawlSpider, Rule
 from scrapy.crawler import CrawlerProcess
 from scrapy.linkextractors import LinkExtractor
+import logging
 
 from django.conf import settings
 
-def get_corpus_from_web(perashki_dir=settings.PERASHKI_UNTAGGED_DIR):
+def get_corpus_from_web(perashki_dir=settings.PERASHKI_UNTAGGED_DIR):    
     def get_int(container):
         string = html.tostring(container, method="text", encoding='unicode').strip()
         if not string[0].isdigit():
@@ -66,7 +67,8 @@ def get_corpus_from_web(perashki_dir=settings.PERASHKI_UNTAGGED_DIR):
                     print(favor_value, plus_value, minus_value, file=fout)
 
     process = CrawlerProcess({})
-
+    # prevents scrapy from spamming my console
+    logging.getLogger('scrapy').setLevel(logging.WARNING)
     process.crawl(WikiSpider)
     process.start()
 
