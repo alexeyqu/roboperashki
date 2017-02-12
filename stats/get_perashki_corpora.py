@@ -80,7 +80,7 @@ def get_lemma(word, morph_parser):
     return morph_parser.parse(word)[0].normal_form
 
 
-def make_tagged_corpus(perashki_dir=settings.PERASHKI_UNTAGGED_DIR, perashki_tagged_dir=settings.PERASHKI_UNTAGGED_DIR):
+def make_tagged_corpus(perashki_dir=settings.PERASHKI_UNTAGGED_DIR, perashki_tagged_dir=settings.PERASHKI_TAGGED_DIR):
     perashki = [(join(perashki_dir, f), join(perashki_tagged_dir, f)) for f in listdir(perashki_dir) if isfile(join(perashki_dir, f))]
     morph = pymorphy2.MorphAnalyzer()
     
