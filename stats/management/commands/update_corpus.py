@@ -15,7 +15,11 @@ class Command(LabelCommand):
         os.makedirs(directory)
 
     def handle_label(self, label, **args):
-        if label != "retag_only":
+        if label not in ('update_all', 'update_markup'):
+            print('Wrong token \"{}\". For retrieving corpus from web call \'manage.py update_corpus update_all\', \
+                for updating linguistic markup call \'manage.py update_corpus update_markup\''.format(label))
+            exit(0)
+        if label == 'update_all':
             self.clear_directory(settings.PERASHKI_UNTAGGED_DIR)
             print('Starting scrapy spider. Relax and have a drink, corpus retrieval may take a while')
             get_corpus_from_web()
