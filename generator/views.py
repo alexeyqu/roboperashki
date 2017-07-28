@@ -1,12 +1,15 @@
 from django.shortcuts import render
-from .perashki_generator import make_random_perashok
+from .perashki_generator import train_ngram_model, make_random_perashok
 from datetime import datetime
 
 from .models import Perashok
 
 def index(request):
     context = {}
-    if "more" in request.POST:
+    if "train" in request.POST:
+        train_ngram_model()
+        context['info_message'] = "Теперь можно печь пирожки!"
+    elif "more" in request.POST:
         generated_text = make_random_perashok()
         context['perashok_lines'] = generated_text.split('\n')
         context['perashok_text'] = generated_text

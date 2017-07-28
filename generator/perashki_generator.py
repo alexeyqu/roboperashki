@@ -212,15 +212,16 @@ def create_and_dump_generator(depth, foldername, dump_filename):
                 for tokens in tokenize_without_punctuation(line):
                     generator.calculate_probabilities(tokens)
     # DEBUG            
-    # print(generator.get_probabilities_table())
+    print(generator.get_probabilities_table())
     
     generator.dump_self(dump_filename)
 
 
-# dummy function, generating one perashok with default arguments
-def make_random_perashok(foldername='constitution', dump_filename=join(settings.BASE_DIR, 'static', 'generator.pickle')):
+def train_ngram_model(foldername='constitution', dump_filename=join(settings.BASE_DIR, 'static', 'generator.pickle')):
     create_and_dump_generator(depth=2, foldername=foldername, dump_filename=dump_filename)
-    
+
+
+def make_random_perashok(foldername='constitution', dump_filename=join(settings.BASE_DIR, 'static', 'generator.pickle')):
     generator = MarkovChainsGenerator(2)
     generator.load_dumped(dump_filename)
     
